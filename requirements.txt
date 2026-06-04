@@ -3,3 +3,5 @@ google-cloud-dialogflow
 google-auth
 mongomock
 gunicorn
+pymongo
+dnspython
