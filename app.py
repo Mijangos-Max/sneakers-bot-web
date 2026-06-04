@@ -37,7 +37,7 @@ def chat():
     data = request.get_json()
     user_message = data.get("message", "")
     
-    # Procesar con Dialogflow
+    # Procesar mensaje con Dialogflow
     session_client = dialogflow.SessionsClient(credentials=credentials)
     session = session_client.session_path(project_id, "user-session-123")
     query_input = dialogflow.QueryInput(text=dialogflow.TextInput(text=user_message, language_code="es"))
@@ -46,6 +46,7 @@ def chat():
     result = response.query_result
     intent_name = result.intent.display_name
     bot_reply = result.fulfillment_text
+    params = dict(result.parameters)
 
     # 1. LÓGICA PARA EL CARRITO
     if intent_name == "Ver_Carrito":
@@ -59,27 +60,26 @@ def chat():
         else:
             bot_reply = "Error de conexión con la base de datos."
 
-    # 2. Guardar interacción (solo si detecta un modelo)
-    elif client:
-        params = dict(result.parameters)
-        modelo_detectado = params.get('modelo')
-        
-        # Solo guardamos si el usuario pidió un modelo, para no llenar la BD con saludos
-        if modelo_detectado:
-           # En la parte de guardar en MongoDB
-historial_col.insert_one({
-    "modelo": params.get('modelo'),
-    "talla": float(params.get('talla')) if params.get('talla') else None # Lo convierte a número real
-})
-                "fecha": datetime.now(),
-                "mensaje_usuario": user_message,
-                "respuesta_bot": bot_reply,
-                "intencion_detectada": intent_name,
-                "modelo": modelo_detectado,
-                "talla": params.get('talla')
-            })
+    # 2. GUARDAR EN MONGODB (Solo si detecta un modelo)
+    elif client and params.get('modelo'):
+        # Convertir talla a número para análisis en Power BI
+        talla_valor = None
+        if params.get('talla'):
+            try:
+                talla_valor = float(params.get('talla'))
+            except:
+                talla_valor = params.get('talla')
 
-    # Asegurar respuesta mínima si Dialogflow devuelve vacío
+        historial_col.insert_one({
+            "fecha": datetime.now(),
+            "mensaje_usuario": user_message,
+            "respuesta_bot": bot_reply,
+            "intencion_detectada": intent_name,
+            "modelo": params.get('modelo'),
+            "talla": talla_valor
+        })
+
+    # Asegurar que siempre haya una respuesta
     if not bot_reply:
         bot_reply = "¡Claro! ¿En qué más puedo ayudarte?"
 
