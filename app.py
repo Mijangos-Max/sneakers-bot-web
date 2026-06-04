@@ -12,7 +12,6 @@ app = Flask(__name__)
 mongo_uri = os.environ.get('MONGO_URI')
 try:
     client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-    # Asegúrate de que esta línea en app.py coincida con el nombre que creaste
     db = client['tienda_tenis'] 
     historial_col = db['historial_chat']
     print("Conexión a MongoDB exitosa")
@@ -21,7 +20,6 @@ except Exception as e:
     client = None
 
 # --- CONFIGURACIÓN DE DIALOGFLOW ---
-# Asegúrate de tener la variable DIALOGFLOW_KEY en Railway con el JSON de tus credenciales
 if 'DIALOGFLOW_KEY' in os.environ:
     key_dict = json.loads(os.environ['DIALOGFLOW_KEY'])
     credentials = service_account.Credentials.from_service_account_info(key_dict)
@@ -39,7 +37,7 @@ def chat():
     data = request.get_json()
     user_message = data.get("message", "")
     
-    # 1. Dialogflow procesa el mensaje
+    # Procesar con Dialogflow
     session_client = dialogflow.SessionsClient(credentials=credentials)
     session = session_client.session_path(project_id, "user-session-123")
     query_input = dialogflow.QueryInput(text=dialogflow.TextInput(text=user_message, language_code="es"))
@@ -49,33 +47,39 @@ def chat():
     intent_name = result.intent.display_name
     bot_reply = result.fulfillment_text
 
-    # 2. LOGICA PARA EL CARRITO
-    if intent_name == "Ver_Carrito": # Asegúrate que el nombre sea EXACTO como en Dialogflow
+    # 1. LÓGICA PARA EL CARRITO
+    if intent_name == "Ver_Carrito":
         if client:
-            # Buscamos en MongoDB lo que el usuario ha pedido recientemente
             items = list(historial_col.find({"modelo": {"$ne": None}}).sort("fecha", -1).limit(3))
             if items:
-                lista_nombres = ", ".join([i.get('modelo', 'desconocido') for i in items])
+                lista_nombres = ", ".join([str(i.get('modelo', 'desconocido')) for i in items])
                 bot_reply = f"En tu carrito tienes: {lista_nombres}."
             else:
-                bot_reply = "Tu carrito está actualmente vacío."
+                bot_reply = "Tu carrito está vacío."
         else:
-            bot_reply = "No puedo conectar a la base de datos para ver tu carrito."
+            bot_reply = "Error de conexión con la base de datos."
 
-    # 3. Guardar interacción en MongoDB (si no es la consulta del carrito)
-    elif client and intent_name != "Ver_Carrito":
+    # 2. Guardar interacción (solo si detecta un modelo)
+    elif client:
         params = dict(result.parameters)
-        historial_col.insert_one({
-            "fecha": datetime.now(),
-            "mensaje_usuario": user_message,
-            "respuesta_bot": bot_reply,
-            "intencion_detectada": intent_name,
-            "modelo": params.get('modelo'),
-            "talla": params.get('talla')
-        })
+        modelo_detectado = params.get('modelo')
+        
+        # Solo guardamos si el usuario pidió un modelo, para no llenar la BD con saludos
+        if modelo_detectado:
+            historial_col.insert_one({
+                "fecha": datetime.now(),
+                "mensaje_usuario": user_message,
+                "respuesta_bot": bot_reply,
+                "intencion_detectada": intent_name,
+                "modelo": modelo_detectado,
+                "talla": params.get('talla')
+            })
+
+    # Asegurar respuesta mínima si Dialogflow devuelve vacío
+    if not bot_reply:
+        bot_reply = "¡Claro! ¿En qué más puedo ayudarte?"
 
     return jsonify({"reply": bot_reply})
 
 if __name__ == '__main__':
-    # Puerto 8080 es estándar en Railway
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
