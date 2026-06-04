@@ -1,73 +1,79 @@
 import os
-from flask import Flask, render_template, request, jsonify
+import json
+from flask import Flask, request, jsonify, render_template
+from google.oauth2 import service_account
 from google.cloud import dialogflow_v2 as dialogflow
-
-# Colector local sincronizado para simular las transacciones sin bloqueos de red
 import mongomock
-client = mongomock.MongoClient()
-db = client["sneakers_bot_db"]
-carrito_collection = db["carritos"]
-
-print("🚀 Enlace Sincronizado: Servidor web activo y listo.")
 
 app = Flask(__name__)
 
-PROJECT_ID = "sneakersbotmx-voco"
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "dialogflow_key.json"
+# =====================================================================
+# CONFIGURACIÓN DE CREDENCIALES (DIALOGFLOW)
+# =====================================================================
+# Si el proyecto corre en Railway, toma la llave desde la variable de entorno.
+# Si estás en tu computadora local, buscará el archivo físico original.
+if 'DIALOGFLOW_KEY' in os.environ:
+    try:
+        key_data = json.loads(os.environ['DIALOGFLOW_KEY'])
+        credentials = service_account.Credentials.from_service_account_info(key_data)
+        project_id = key_data.get('project_id')
+    except Exception as e:
+        print(f"Error al procesar la variable DIALOGFLOW_KEY: {e}")
+        credentials = None
+        project_id = None
+else:
+    # Configuración de respaldo para tu entorno de desarrollo local (PC)
+    local_key_path = 'dialogflow_key.json'
+    if os.path.exists(local_key_path):
+        credentials = service_account.Credentials.from_service_account_file(local_key_path)
+        with open(local_key_path) as f:
+            project_id = json.load(f).get('project_id')
+    else:
+        credentials = None
+        project_id = None
 
-def detectar_intencion(texto_usuario, session_id="123456789"):
-    session_client = dialogflow.SessionsClient()
-    session = session_client.session_path(PROJECT_ID, str(session_id))
-    text_input = dialogflow.TextInput(text=texto_usuario, language_code="es")
-    query_input = dialogflow.QueryInput(text=text_input)
-    response = session_client.detect_intent(request={"session": session, "query_input": query_input})
-    return (
-        response.query_result.fulfillment_text, 
-        response.query_result.intent.display_name, 
-        response.query_result.parameters
-    )
+# =====================================================================
+# RUTAS DE TU APLICACIÓN FLASK
+# =====================================================================
 
 @app.route('/')
 def home():
+    # Renderiza la página principal que está en tu carpeta de plantillas (templates)
     return render_template('index.html')
 
-@app.route('/chat', methods=['POST'])
-def chat():
-    datos = request.get_json()
-    mensaje_usuario = datos.get("mensaje")
-    usuario_id = 123456789  
-    
+@app.route('/get_response', methods=['POST'])
+def get_response():
+    if not credentials or not project_id:
+        return jsonify({"reply": "Error de configuración: No se encontraron las credenciales de Dialogflow en el servidor."}), 500
+
     try:
-        respuesta_bot, intent_name, parametros = detectar_intencion(mensaje_usuario, session_id=usuario_id)
-        
-        if intent_name == "Agregar_Carrito":
-            producto = parametros.get("producto")
-            talla = parametros.get("talla")
-            color = parametros.get("color")
-            
-            if producto and talla and color:
-                item_carrito = {
-                    "producto": str(producto), 
-                    "talla": str(talla), 
-                    "color": str(color)
-                }
-                
-                # Registra localmente la estructura exacta compatible de Telegram
-                carrito_collection.update_one(
-                    {"user_id": int(usuario_id)},
-                    {"$push": {"items": item_carrito}},
-                    upsert=True
-                )
-                # Esta frase garantiza que en la web se vea la confirmación del registro exitoso
-                respuesta_bot += " 🛍️ (¡Registrado con éxito en la Base de Datos!)."
-            else:
-                respuesta_bot += " ⚠️ (Faltan parámetros del calzado)."
-            
+        data = request.get_json()
+        user_message = data.get("message", "")
+        session_id = data.get("session_id", "default_session")
+
+        # Conexión con el cliente de Dialogflow usando las credenciales inyectadas
+        session_client = dialogflow.SessionsClient(credentials=credentials)
+        session = session_client.session_path(project_id, session_id)
+
+        text_input = dialogflow.TextInput(text=user_message, language_code="es")
+        query_input = dialogflow.QueryInput(text=text_input)
+
+        response = session_client.detect_intent(request={"session": session, "query_input": query_input})
+        bot_reply = response.query_result.fulfillment_text
+
+        return jsonify({"reply": bot_reply})
+
     except Exception as e:
-        print(f"❌ Detalle en proceso: {e}")
-        respuesta_bot = "⚠️ Ocurrió un detalle al procesar la solicitud."
+        print(f"Error durante la comunicación con Dialogflow: {e}")
+        return jsonify({"reply": "Hubo un problema al procesar tu mensaje. Inténtalo de nuevo."}), 500
 
-    return jsonify({"respuesta": response_bot if 'response_bot' in locals() else respuesta_bot})
-
+# =====================================================================
+# ARRANQUE DEL SERVIDOR (ADAPTADO PARA RAILWAY Y PC)
+# =====================================================================
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # PORT es la variable dinámica que Railway inyecta de forma obligatoria.
+    # En tu computadora usará el puerto 5000 por defecto.
+    port = int(os.environ.get('PORT', 5000))
+    
+    # 0.0.0.0 es indispensable para que el contenedor escuche peticiones externas
+    app.run(host='0.0.0.0', port=port)
