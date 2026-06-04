@@ -8,9 +8,9 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# 1. CONFIGURACIÓN DE BASE DE DATOS (MONGODB)
-# Asegúrate de tener la variable MONGO_URI en la configuración de Railway
-mongo_uri = os.environ.get('MONGO_URI', 'mongodb+srv://tu_usuario:tu_password@cluster.mongodb.net/tienda_tenis')
+# 1. CONEXIÓN A MONGODB
+# Asegúrate de que la variable MONGO_URI esté configurada en Railway
+mongo_uri = os.environ.get('MONGO_URI')
 client = MongoClient(mongo_uri)
 db = client['tienda_tenis']
 historial_col = db['historial_chat']
@@ -40,15 +40,16 @@ def guardar_en_db(mensaje, respuesta):
 def home():
     return render_template('index.html')
 
-@app.route('/get_response', methods=['POST'])
-def get_response():
+# ESTA ES LA RUTA QUE CORRIGE EL ERROR 404
+@app.route('/chat', methods=['POST'])
+def chat():
     if not credentials or not project_id:
         return jsonify({"reply": "Error: Credenciales no configuradas."}), 500
 
     data = request.get_json()
     user_message = data.get("message", "")
     
-    # Conexión Dialogflow
+    # Conexión a Dialogflow
     session_client = dialogflow.SessionsClient(credentials=credentials)
     session = session_client.session_path(project_id, "user-session-123")
     text_input = dialogflow.TextInput(text=user_message, language_code="es")
@@ -57,11 +58,11 @@ def get_response():
     response = session_client.detect_intent(request={"session": session, "query_input": query_input})
     bot_reply = response.query_result.fulfillment_text
 
-    # Guardar en MongoDB (Punto NoSQL/JSON)
+    # Guardar en MongoDB
     guardar_en_db(user_message, bot_reply)
 
     return jsonify({"reply": bot_reply})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 8080)) # Puerto 8080 estándar en Railway
     app.run(host='0.0.0.0', port=port)
