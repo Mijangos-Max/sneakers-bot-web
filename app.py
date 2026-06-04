@@ -38,40 +38,40 @@ def chat():
     data = request.get_json()
     user_message = data.get("message", "")
     
-    if not credentials or not project_id:
-        return jsonify({"reply": "Error de configuración del bot"}), 500
-
-    # --- DIALOGFLOW: Procesar el mensaje ---
+    # 1. Dialogflow procesa el mensaje
     session_client = dialogflow.SessionsClient(credentials=credentials)
     session = session_client.session_path(project_id, "user-session-123")
-    text_input = dialogflow.TextInput(text=user_message, language_code="es")
-    query_input = dialogflow.QueryInput(text=text_input)
-
+    query_input = dialogflow.QueryInput(text=dialogflow.TextInput(text=user_message, language_code="es"))
     response = session_client.detect_intent(request={"session": session, "query_input": query_input})
     
-    # --- EXTRACCIÓN DE DATOS ---
     result = response.query_result
-    bot_reply = result.fulfillment_text
     intent_name = result.intent.display_name
-    
-    # Extraemos los parámetros definidos en Dialogflow
-    params = dict(result.parameters)
-    modelo = params.get('modelo')
-    talla = params.get('talla')
+    bot_reply = result.fulfillment_text
 
-    # --- GUARDAR EN MONGO DB ---
-    if client:
-        try:
-            historial_col.insert_one({
-                "fecha": datetime.now(),
-                "mensaje_usuario": user_message,
-                "respuesta_bot": bot_reply,
-                "intencion_detectada": intent_name,
-                "modelo": modelo,
-                "talla": talla
-            })
-        except Exception as e:
-            print(f"Error al guardar en MongoDB: {e}")
+    # 2. LOGICA PARA EL CARRITO
+    if intent_name == "Ver_Carrito": # Asegúrate que el nombre sea EXACTO como en Dialogflow
+        if client:
+            # Buscamos en MongoDB lo que el usuario ha pedido recientemente
+            items = list(historial_col.find({"modelo": {"$ne": None}}).sort("fecha", -1).limit(3))
+            if items:
+                lista_nombres = ", ".join([i.get('modelo', 'desconocido') for i in items])
+                bot_reply = f"En tu carrito tienes: {lista_nombres}."
+            else:
+                bot_reply = "Tu carrito está actualmente vacío."
+        else:
+            bot_reply = "No puedo conectar a la base de datos para ver tu carrito."
+
+    # 3. Guardar interacción en MongoDB (si no es la consulta del carrito)
+    elif client and intent_name != "Ver_Carrito":
+        params = dict(result.parameters)
+        historial_col.insert_one({
+            "fecha": datetime.now(),
+            "mensaje_usuario": user_message,
+            "respuesta_bot": bot_reply,
+            "intencion_detectada": intent_name,
+            "modelo": params.get('modelo'),
+            "talla": params.get('talla')
+        })
 
     return jsonify({"reply": bot_reply})
 
