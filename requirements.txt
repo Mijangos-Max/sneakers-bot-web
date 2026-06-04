@@ -1,7 +1,6 @@
+pymongo[srv]
+dnspython
 flask
+gunicorn
 google-cloud-dialogflow
 google-auth
-mongomock
-gunicorn
-pymongo
-dnspython
