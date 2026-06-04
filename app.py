@@ -12,7 +12,8 @@ app = Flask(__name__)
 mongo_uri = os.environ.get('MONGO_URI')
 try:
     client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-    db = client['tienda_tenis'] # Asegúrate de que este sea tu nombre de BD
+    # Asegúrate de que esta línea en app.py coincida con el nombre que creaste
+    db = client['tienda_tenis'] 
     historial_col = db['historial_chat']
     print("Conexión a MongoDB exitosa")
 except Exception as e:
