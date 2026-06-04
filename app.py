@@ -8,14 +8,17 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# 1. CONEXIÓN A MONGODB
-# Asegúrate de que la variable MONGO_URI esté configurada en Railway
+# Configuración MongoDB
 mongo_uri = os.environ.get('MONGO_URI')
-client = MongoClient(mongo_uri)
-db = client['tienda_tenis']
-historial_col = db['historial_chat']
+try:
+    client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+    db = client['tienda_tenis']
+    historial_col = db['historial_chat']
+except Exception as e:
+    print(f"Error MongoDB: {e}")
+    client = None
 
-# 2. CONFIGURACIÓN DE DIALOGFLOW
+# Configuración Dialogflow
 if 'DIALOGFLOW_KEY' in os.environ:
     key_data = json.loads(os.environ['DIALOGFLOW_KEY'])
     credentials = service_account.Credentials.from_service_account_info(key_data)
@@ -24,45 +27,44 @@ else:
     credentials = None
     project_id = None
 
-# 3. FUNCIONES DE APOYO
-def guardar_en_db(mensaje, respuesta):
-    try:
-        historial_col.insert_one({
-            "fecha": datetime.now(),
-            "mensaje_usuario": mensaje,
-            "respuesta_bot": respuesta
-        })
-    except Exception as e:
-        print(f"Error al guardar en MongoDB: {e}")
-
-# 4. RUTAS
 @app.route('/')
 def home():
     return render_template('index.html')
 
-# ESTA ES LA RUTA QUE CORRIGE EL ERROR 404
 @app.route('/chat', methods=['POST'])
 def chat():
-    if not credentials or not project_id:
-        return jsonify({"reply": "Error: Credenciales no configuradas."}), 500
-
     data = request.get_json()
     user_message = data.get("message", "")
     
-    # Conexión a Dialogflow
+    # Dialogflow
     session_client = dialogflow.SessionsClient(credentials=credentials)
     session = session_client.session_path(project_id, "user-session-123")
     text_input = dialogflow.TextInput(text=user_message, language_code="es")
     query_input = dialogflow.QueryInput(text=text_input)
 
     response = session_client.detect_intent(request={"session": session, "query_input": query_input})
-    bot_reply = response.query_result.fulfillment_text
+    
+    # --- LO NUEVO: Extraer parámetros de Dialogflow ---
+    result = response.query_result
+    bot_reply = result.fulfillment_text
+    
+    # Extraemos los parámetros (modelo y talla) si existen
+    params = dict(result.parameters)
+    modelo = params.get('modelo', None)
+    talla = params.get('talla', None)
 
-    # Guardar en MongoDB
-    guardar_en_db(user_message, bot_reply)
+    # Guardar en MongoDB con los datos extraídos
+    if client:
+        historial_col.insert_one({
+            "fecha": datetime.now(),
+            "mensaje_usuario": user_message,
+            "respuesta_bot": bot_reply,
+            "intencion": result.intent.display_name,
+            "modelo_detectado": modelo,
+            "talla_detectada": talla
+        })
 
     return jsonify({"reply": bot_reply})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080)) # Puerto 8080 estándar en Railway
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=8080)
