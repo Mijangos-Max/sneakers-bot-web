@@ -66,7 +66,11 @@ def chat():
         
         # Solo guardamos si el usuario pidió un modelo, para no llenar la BD con saludos
         if modelo_detectado:
-            historial_col.insert_one({
+           # En la parte de guardar en MongoDB
+historial_col.insert_one({
+    "modelo": params.get('modelo'),
+    "talla": float(params.get('talla')) if params.get('talla') else None # Lo convierte a número real
+})
                 "fecha": datetime.now(),
                 "mensaje_usuario": user_message,
                 "respuesta_bot": bot_reply,
