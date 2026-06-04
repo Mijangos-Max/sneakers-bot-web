@@ -3,103 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Integral - Tienda de Tenis</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>SneakersBotMX - Panel de Control</title>
     <style>
-        body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .navbar-custom { background-color: #1a365d; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        .chat-window { height: 480px; overflow-y: auto; background: #ffffff; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.06); }
-        .msg { margin-bottom: 14px; padding: 10px 16px; border-radius: 18px; max-width: 80%; font-size: 10.5pt; line-height: 1.4; }
-        .msg-user { background-color: #3182ce; color: white; margin-left: auto; border-bottom-right-radius: 4px; }
-        .msg-bot { background-color: #edf2f7; color: #2d3748; margin-right: auto; border-bottom-left-radius: 4px; }
-        .dashboard-container { background: white; border-radius: 12px; border: 1px solid #e2e8f0; height: 560px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-        .card { border: none; border-radius: 12px; }
-        .card-header { font-weight: 600; font-size: 11.5pt; letter-spacing: 0.5px; border-top-left-radius: 12px !important; border-top-right-radius: 12px !important; }
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f9; }
+        #chat-container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        #chat-box { height: 300px; overflow-y: scroll; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
+        #chat-input { width: 80%; padding: 10px; }
+        button { padding: 10px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<nav class="navbar navbar-dark navbar-custom mb-4 py-3">
-    <div class="container-fluid px-4">
-        <span class="navbar-brand mb-0 h1 d-flex align-items-center">
-            <span class="me-2">👟</span> Panel de Control Integral - SneakersBotMX
-        </span>
-        <span class="badge bg-success px-3 py-2 text-uppercase font-weight-bold" style="letter-spacing: 1px;">MongoDB Live Connected</span>
-    </div>
-</nav>
-
-<div class="container-fluid px-4">
-    <div class="row">
-        <div class="col-md-5 mb-4">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white py-3">Asistente Virtual de Ventas (Dialogflow)</div>
-                <div class="card-body p-4">
-                    <div class="chat-window d-flex flex-column" id="chatWindow">
-                        <div class="msg msg-bot">¡Hola! Bienvenido a <b>SneakersBotMX</b>. ¿Qué modelo o talla de tenis estás buscando hoy?</div>
-                    </div>
-                    <div class="input-group mt-3">
-                        <input type="text" id="userInput" class="form-control form-control-lg" placeholder="Escribe tu mensaje aquí..." onkeypress="handleKeyPress(event)">
-                        <button class="btn btn-primary px-4" onclick="enviarMensaje()">Enviar</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-7 mb-4">
-            <div class="card shadow-sm">
-                <div class="card-header bg-success text-white py-3">Análisis de Datos Comercial (Power BI Dashboard)</div>
-                <div class="card-body p-2">
-                    <div class="dashboard-container">
-                        <iframe title="Dashboard de Ventas" width="100%" height="100%" 
-                                src="https://maps.google.com/maps?q=Mexico&t=&z=13&ie=UTF-8&iwloc=&output=embed" 
-                                frameborder="0" allowFullScreen="true">
-                        </iframe>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+<div id="chat-container">
+    <h2>Asistente Virtual SneakersBotMX</h2>
+    <div id="chat-box"></div>
+    <input type="text" id="chat-input" placeholder="Escribe tu mensaje aquí...">
+    <button onclick="enviarMensaje()">Enviar</button>
 </div>
 
 <script>
-    function appendMessage(texto, emisor) {
-        const chatWindow = document.getElementById("chatWindow");
-        const msgDiv = document.createElement("div");
-        msgDiv.classList.add("msg", emisor === "user" ? "msg-user" : "msg-bot");
-        msgDiv.innerHTML = texto;
-        chatWindow.appendChild(msgDiv);
-        chatWindow.scrollTop = chatWindow.scrollHeight; // Auto-scroll automático hacia abajo
-    }
+async function enviarMensaje() {
+    const input = document.getElementById('chat-input');
+    const mensaje = input.value.trim();
+    if (!mensaje) return;
 
-    function enviarMensaje() {
-        const input = document.getElementById("userInput");
-        const mensaje = input.value.trim();
-        if (!mensaje) return;
+    // Mostrar mensaje del usuario
+    const chatBox = document.getElementById('chat-box');
+    chatBox.innerHTML += `<p><b>Tú:</b> ${mensaje}</p>`;
+    input.value = '';
 
-        // Pintar el mensaje en el chat
-        appendMessage(mensaje, "user");
-        input.value = "";
-
-        // Enviar petición POST asíncrona a nuestro servidor local app.py
-        fetch('/chat', { ... })
+    try {
+        // Enviar al servidor Python (Backend en Railway)
+        const response = await fetch('/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mensaje: mensaje, usuario: "Cliente_Web" })
-        })
-        .then(response => response.json())
-        .then(data => {
-            // Pintar la respuesta devuelta por Dialogflow / MongoDB
-            appendMessage(data.respuesta, "bot");
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            appendMessage("⚠️ Error de comunicación con el servidor Flask local.", "bot");
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: mensaje})
         });
-    }
 
-    function handleKeyPress(event) {
-        if (event.key === 'Enter') enviarMensaje();
+        if (!response.ok) throw new Error('Error en el servidor');
+
+        const data = await response.json();
+        
+        // Mostrar respuesta del bot
+        chatBox.innerHTML += `<p><b>Bot:</b> ${data.reply}</p>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+    } catch (error) {
+        console.error("Error:", error);
+        chatBox.innerHTML += `<p style="color:red;">Error de conexión.</p>`;
     }
+}
+
+// Permitir enviar con la tecla Enter
+document.getElementById('chat-input').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') enviarMensaje();
+});
 </script>
 
 </body>
