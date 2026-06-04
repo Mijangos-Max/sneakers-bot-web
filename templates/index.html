@@ -81,7 +81,7 @@
         input.value = "";
 
         // Enviar petición POST asíncrona a nuestro servidor local app.py
-        fetch('/chat', {
+        fetch('/chat', { ... })
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ mensaje: mensaje, usuario: "Cliente_Web" })
